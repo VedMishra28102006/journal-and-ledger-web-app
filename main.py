@@ -11,7 +11,8 @@ db = sqlite3.connect("data.db")
 cursor = db.cursor()
 cursor.execute("""CREATE TABLE IF NOT EXISTS fys (
 	id INTEGER PRIMARY KEY UNIQUE NOT NULL,
-	name TEXT NOT NULL
+	name TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT "open"
 )""")
 db.commit()
 db.close()
@@ -87,29 +88,48 @@ def fy():
 			rows = [rows[i] for i in sim_scores.argsort()[::-1] if sim_scores[i] >= 0.3]
 		return jsonify(rows), 200
 	elif request.method == "PATCH":
-		error = check_fields(request.form, ["id", "fy_name"])
+		error = check_fields(request.form, ["id", "purpose"])
 		if error:
 			db.close()
 			return jsonify(error), 400
+		purpose = request.form.get("purpose").strip()
 		id = request.form.get("id").strip()
-		cursor.execute("SELECT * FROM fys WHERE id=?", (id,))
-		row = cursor.fetchone()
-		if not row:
+		if purpose == "update_text":
+			error = check_fields(request.form, ["fy_name"])
+			if error:
+				db.close()
+				return jsonify(error), 400
+			cursor.execute("SELECT * FROM fys WHERE id=?", (id,))
+			row = cursor.fetchone()
+			if not row:
+				db.close()
+				return jsonify({"error": "Invalid id"}), 400
+			fy_name = request.form.get("fy_name").strip()
+			cursor.execute("SELECT * FROM fys WHERE name=? AND id!=?", (fy_name, id))
+			row = cursor.fetchone()
+			if row:
+				db.close()
+				return jsonify({
+					"error": "Journal already exists",
+					"id": row["id"]
+				}), 400
+			cursor.execute("UPDATE fys SET name=? WHERE id=?", (fy_name, id))
+			db.commit()
 			db.close()
-			return jsonify({"error": "Invalid id"}), 400
-		fy_name = request.form.get("fy_name").strip()
-		cursor.execute("SELECT * FROM fys WHERE name=? AND id!=?", (fy_name, id))
-		row = cursor.fetchone()
-		if row:
+			return jsonify({"success": 1}), 200
+		elif purpose == "update_status":
+			cursor.execute("SELECT * FROM fys WHERE id=?", (id,))
+			row = cursor.fetchone()
+			if not row:
+				db.close()
+				return jsonify({"error": "Invalid id"}), 400
+			status = dict(row).get("status")
+			cursor.execute("UPDATE fys SET status=? WHERE id=?", ("closed" if status == "open" else "open", id))
+			db.commit()
 			db.close()
-			return jsonify({
-				"error": "Journal already exists",
-				"id": row["id"]
-			}), 400
-		cursor.execute("UPDATE fys SET name=? WHERE id=?", (fy_name, id))
-		db.commit()
-		db.close()
-		return jsonify({"success": 1}), 200
+			return jsonify({"success": 1, "status": "closed" if status == "open" else "open"}), 200
+		else:
+			return jsonify({"error": "Invalid purpose"}), 400
 	elif request.method == "DELETE":
 		error = check_fields(request.form, ["id"])
 		if error:
@@ -209,7 +229,7 @@ def ledger(id):
 	db = sqlite3.connect("data.db")
 	cursor = db.cursor()
 	cursor.row_factory = sqlite3.Row
-	cursor.execute("SELECT id FROM fys WHERE id=?", id)
+	cursor.execute("SELECT id FROM fys WHERE id=?", (id,))
 	row = cursor.fetchone()
 	if not row:
 		return jsonify({"error": "Invalid id"}), 400

@@ -49,7 +49,7 @@
 			}
 			#fy_list > li,
 			#ledger_list > li {
-				background-image: linear-gradient(to right, black, rgb(30, 30, 30));
+				background-image: linear-gradient(to right, rgb(30, 30, 30), black);
 				border-top: 1px solid grey;
 				color: white;
 				display: flex;
@@ -67,10 +67,18 @@
 			#ledger_list > li:first-child {
 				border-top: none;
 			}
-			#fy_list > li:hover,
+			#fy_list > li[status="closed"] {
+				background-image: linear-gradient(to right, rgb(50, 10, 10), rgb(30, 0, 0));
+				cursor: pointer;
+			}
+			#fy_list > li[status="closed"]:hover{
+				background-image: linear-gradient(to right, rgb(70, 20, 20), rgb(50, 10, 10));
+				cursor: pointer;
+			}
+			#fy_list > li[status="open"]:hover,
 			#fy_list > li > ul > li:hover,
 			#ledger_list > li:hover {
-				background-image: linear-gradient(to right, rgb(30, 30, 30), rgb(50, 50, 50));
+				background-image: linear-gradient(to right, rgb(50, 50, 50), rgb(30, 30, 30));
 				cursor: pointer;
 			}
 			#fy_list > li > button {
@@ -96,7 +104,7 @@
 				padding: 10px;
 			}
 			#fy_list > li > form > input {
-				background-image: linear-gradient(to right, rgb(30, 30, 30), rgb(50, 50, 50));
+				background-color: transparent;
 				border: none;
 				color: white;
 				flex: 1;
@@ -119,7 +127,7 @@
 				display: flex;
 			}
 			#fy_list > li > ul > li {
-				background-image: linear-gradient(to right, black, rgb(30, 30, 30));
+				background-image: linear-gradient(to right, rgb(30, 30, 30), black);
 				padding: 5px 20px 5px;
 				text-align: center;
 			}
@@ -173,7 +181,7 @@
 				width: 100%;
 			}
 			#journal_form > button[type="button"] {
-				background-image: linear-gradient(to right, black, rgb(30, 30, 30));
+				background-image: linear-gradient(to right, rgb(30, 30, 30), black);
 				border: 1px solid grey;
 				border-image: linear-gradient(to right, pink, yellow) 1;
 				box-shadow: 0px 0px 5px black;
@@ -293,7 +301,7 @@
 				top: 100%;
 			}
 			table > thead > tr {
-				background-image: linear-gradient(to right, black, rgb(30, 30, 30));
+				background-image: linear-gradient(to right, rgb(30, 30, 30), black);
 				color: white;
 				font-size: large;
 				overflow: hidden;
@@ -301,7 +309,7 @@
 				position: relative;
 			}
 			table > thead > tr > th {
-				background-image: linear-gradient(to right, black, rgb(30, 30, 30));
+				background-image: linear-gradient(to right, rgb(30, 30, 30), black);
 				font-family: cursive;
 				font-size: large;
 				padding: 10px;
@@ -378,7 +386,7 @@
 			}
 			.top_form > button {
 				background-image: linear-gradient(to right, pink, yellow);
-				border: 1px solid black;
+				border: none;
 				box-shadow: 0px 0px 5px black;
 				cursor: pointer;
 				font-size: large;
@@ -387,7 +395,9 @@
 				z-index: 1;
 			}
 			.top_form > .tf_wrapper {
-				background-image: linear-gradient(to right, pink, yellow);		
+				background-image: linear-gradient(to right, pink, yellow);
+				border-left: 1px solid black;	
+				border-right: 1px solid black;	
 				display: flex;
 				flex: 1;
 				padding: 5px;
@@ -566,13 +576,14 @@
 			let fy_form = document.getElementById("fy_form");
 			let fy_list = document.getElementById("fy_list");
 			let fy_item = (row) => {
-				return `<li id="${row.id}" onclick="show_journal(${row.id})">
+				return `<li id="${row.id}" onclick="show_journal('${row.id}')" status="${row.status}">
 					<p>${row.name}</p>
-					<button onclick="event.stopPropagation();showOptions(${row.id});">&vellip;</button>
+					<button onclick="event.stopPropagation();showOptions('${row.id}');">&vellip;</button>
 					<ul class="options" id="options${row.id}">
-						<li onclick="event.stopPropagation();show_journal(${row.id})">view</li>
-						<li onclick="event.stopPropagation();edit_fy(${row.id})">edit</li>
-						<li onclick="event.stopPropagation();delete_fy(${row.id})">delete</li>
+						<li onclick="event.stopPropagation();show_journal('${row.id}')">view</li>
+						<li onclick="event.stopPropagation();edit_fy('${row.id}')">edit</li>
+						<li onclick="event.stopPropagation();delete_fy('${row.id}')">delete</li>
+						<li onclick="event.stopPropagation();toggle_fy(this, '${row.id}')">${(row.status == "closed") ? "open" : "close"}</li>
 					</ul>
 				</li>`;
 			};
@@ -612,11 +623,11 @@
 					focused = null;
 				}
 			});
+			let insearch = false;
 			fy_form.addEventListener("submit", (event) => {
 				event.preventDefault();
 				let data = new FormData(fy_form);
 				if (event.submitter.id == "add_btn") {
-					fetch_fy();
 					fetch("/fy", {
 						method: "POST",
 						body: data
@@ -624,52 +635,79 @@
 					.then(data => {
 						if (data.error && data.id) {
 							let fy = document.getElementById(`${data.id}`);
-							fy.scrollIntoView({
-								behavior: "smooth",
-								block: "center"
-							});
-							fy.style.backgroundImage = "linear-gradient(to right, rgb(30, 30, 30), rgb(50, 50, 50))";
-							setTimeout(() => {
-								fy.style.backgroundImage = "linear-gradient(to right, black, rgb(30, 30, 30))";
-							}, 500);
+							let temp_func = () => {
+								if (!fy) { fy = document.getElementById(`${data.id}`); }
+								fy.scrollIntoView({
+									behavior: "smooth",
+									block: "center"
+								});
+								fy.style.backgroundImage = (fy.getAttribute("status") == "closed")
+									? "linear-gradient(to right, rgb(70, 20, 20), rgb(50, 10, 10))"
+									: "linear-gradient(to right, rgb(50, 50, 50), rgb(30, 30, 30))";
+								setTimeout(() => {
+									fy.style.backgroundImage = "";
+								}, 500);
+							};
+							if (!fy) {
+								fetch_fy().then(temp_func);
+								insearch = false;
+							} else {
+								temp_func();
+							}
 						} else if (data.success) {
-							fy_form.querySelector("input").value = "";
-							fy_list.insertAdjacentHTML("beforeend", fy_item(data.row));
-							fy_list.children[fy_list.children.length-1].scrollIntoView({
-								behavior: "smooth",
-								block: "center"
-							});
-							fy_list.children[fy_list.children.length-1].style.backgroundImage = "linear-gradient(to right, rgb(30, 30, 30), rgb(50, 50, 50))";
-							setTimeout(() => {
-								fy_list.children[fy_list.children.length-1].style.backgroundImage = "linear-gradient(to right, black, rgb(30, 30, 30))";
-							}, 500);
+							let temp_func = () => {
+								fy_form.querySelector("input").value = "";
+								if (!insearch) {
+									fy_list.insertAdjacentHTML("beforeend", fy_item(data.row));
+								}
+								fy_list.children[fy_list.children.length-1].scrollIntoView({
+									behavior: "smooth",
+									block: "center"
+								});
+								fy_list.children[fy_list.children.length-1].style.backgroundImage = "linear-gradient(to right, rgb(50, 50, 50), rgb(30, 30, 30))";
+								setTimeout(() => {
+									fy_list.children[fy_list.children.length-1].style.backgroundImage = "";
+								}, 500);
+							};
+							if (insearch) {
+								fetch_fy().then(() =>{
+									insearch = true;
+									temp_func();
+								});
+							} else {
+								temp_func();
+							}
 						}
 					})
 					.catch(error => {alert(error);});
 				}
 				if (event.submitter.id == "search_btn") {
+					if (!insearch) { insearch = true; }
 					fetch_fy(data.get("fy_name"));
 				}
 			});
 			let fetch_fy = (fy_q=null) => {
-				fy_list.innerHTML = "";
-				fetch(`/fy${(fy_q) ? `?fy_q=${fy_q}` : ""}`, {method: "GET"})
-				.then(response => response.json())
-				.then(data => {
-					for (row of data) {
-						fy_list.insertAdjacentHTML("beforeend", fy_item(row));
-					}
-				})
-				.catch(error => {
-					alert(error);
+				return new Promise((resolve, reject) => {
+					fy_list.innerHTML = "";
+					fetch(`/fy${(fy_q) ? `?fy_q=${fy_q}` : ""}`, {method: "GET"})
+					.then(response => response.json())
+					.then(data => {
+						for (row of data) {
+							fy_list.insertAdjacentHTML("beforeend", fy_item(row));
+						}
+						resolve(data);
+					})
+					.catch(error => {
+						reject(error);
+					});
 				});
 			};
 			fetch_fy();
 			let edit_fy = (id) => {
-				document.getElementById(`options${id}`).style.display = "none";
+				document.getElementById(`options${id}`).classList.remove("visible");
 				let fy = document.getElementById(`${id}`);
 				fy.innerHTML = `
-					<form onsubmit="event.preventDefault();update_fy(${id})">
+					<form onsubmit="event.preventDefault();update_fy('${id}')">
 						<input id="input${id}" type="text" value="${fy.children[0].innerText}">
 						<button type="submit">ok</button>
 					</form>
@@ -682,6 +720,7 @@
 				let data = new FormData();
 				data.append("id", id);
 				data.append("fy_name", fy_name);
+				data.append("purpose", "update_text");
 				fetch("/fy", {
 					method: "PATCH",
 					body: data
@@ -690,25 +729,42 @@
 				.then(data => {
 					if (data.error && data.id) {
 						let fy = document.getElementById(`${data.id}`);
-						fy.scrollIntoView({
-							behavior: "smooth",
-							block: "center"
-						});
-						fy.style.backgroundImage = "linear-gradient(to right, rgb(30, 30, 30), rgb(50, 50, 50))";
-						setTimeout(() => {
-							fy.style.backgroundImage = "linear-gradient(to right, black, rgb(30, 30, 30))";
-						}, 500);
-						setTimeout(() => {
-							document.getElementById(`${id}`).scrollIntoView({
+						let temp_func = () => {
+							if (!fy) { fy = document.getElementById(`${data.id}`); }
+							fy.scrollIntoView({
 								behavior: "smooth",
 								block: "center"
 							});
-						}, 500);
+							fy.style.backgroundImage = (fy.getAttribute("status") == "closed")
+								? "linear-gradient(to right, rgb(70, 20, 20), rgb(50, 10, 10))"
+								: "linear-gradient(to right, rgb(50, 50, 50), rgb(30, 30, 30))";
+							setTimeout(() => {
+								fy.style.backgroundImage = "";
+							}, 500);
+							setTimeout(() => {
+								document.getElementById(`${id}`).scrollIntoView({
+									behavior: "smooth",
+									block: "center"
+								});
+							}, 500);
+							document.getElementById(`input${id}`).focus();
+						};
+						if (!fy) {
+							fetch_fy().then(() => {
+								edit_fy(id);
+								document.getElementById(`input${id}`).value = fy_name;
+								temp_func();
+							});
+							insearch = false;
+						} else {
+							temp_func();
+						}	
 					} else if (data.success) {
 						let fy = document.getElementById(`${id}`);
 						fy.outerHTML = fy_item({
 							id: id,
-							name: fy_name
+							name: fy_name,
+							status: fy.getAttribute("status")
 						});
 						fy.onclick = (event) => {
 							event.stopPropagation();
@@ -719,7 +775,7 @@
 				.catch(error => {alert(error);});
 			};
 			let delete_fy = (id) => {
-				document.getElementById(`options${id}`).style.display = "none";
+				document.getElementById(`options${id}`).classList.remove("visible");
 				let data = new FormData();
 				data.append("id", id);
 				fetch("/fy", {
@@ -736,35 +792,71 @@
 				})
 				.catch(error => {alert(error);});
 			};
+			let toggle_fy = (target, id) => {
+				document.getElementById(`options${id}`).classList.remove("visible");
+				let data = new FormData();
+				data.append("id", id);
+				data.append("purpose", "update_status");
+				fetch("/fy", {
+					method: "PATCH",
+					body: data
+				})
+				.then(response => response.json())
+				.then(data => {
+					if (data.error) {
+						alert(data.error);
+					} else if (data.success) {
+						document.getElementById(`${id}`).setAttribute("status", data.status);
+						target.innerHTML = (data.status == "closed") ? "open" : "close";
+					}
+				})
+				.catch(error => {alert(error);});
+			};
 			let journal = document.getElementById("journal");
 			let journal_form = document.getElementById("journal_form");
-			let journal_row = (row) => {
+			let journal_row = (row, status) => {
 				return `<tr>
 					<td onclick="focused=this">
 						<small class="error"></small>
-						<input name="date" type="date" value="${(row) ? row.date : ''}">
+						${(status == "closed")
+							? `<p>${(row) ? row.date : ''}</p>`
+							: `<input name="date" type="date" value="${(row) ? row.date : ''}">`
+						}
 					</td>
 					<td onclick="focused=this">
 						<small class="error"></small>
-						<input name="ac_debited" type="text" value="${(row) ? row.ac_debited : ''}">
+						${(status == "closed")
+							? `<p>${(row) ? row.ac_debited : ''}</p>`
+							: `<input name="ac_debited" type="text" value="${(row) ? row.ac_debited : ''}">`
+						}
 					</td>
 					<td onclick="focused=this">
 						<small class="error"></small>
-						<input name="ac_credited" type="text" value="${(row) ? row.ac_credited : ''}">
+						${(status == "closed")
+							? `<p>${(row) ? row.ac_credited : ''}</p>`
+							: `<input name="ac_credited" type="text" value="${(row) ? row.ac_credited : ''}">`
+						}
 					</td>
 					<td onclick="focused=this">
 						<small class="error"></small>
-						<input name="amount" oninput="update_total()" type="number" value="${(row) ? row.amount : ''}">
+						${(status == "closed")
+							? `<p>${(row) ? row.amount : ''}</p>`
+							: `<input name="amount" oninput="update_total()" type="number" value="${(row) ? row.amount : ''}">`
+						}
 					</td>
 					<td onclick="focused=this">
 						<small class="error"></small>
-						<input name="description" type="text" value="${(row) ? row.description : ''}">
+						${(status == "closed")
+							? `<p>${(row) ? row.date : ''}</p>`
+							: `<input name="description" type="text" value="${(row) ? row.description : ''}">`
+						}
 					</td>
 				</tr>`;
 			};
 			let journal_rows = document.getElementById("journal_rows");
 			let journal_total = document.getElementById("journal_total");
 			let add_row = () => {
+				if (document.getElementById(journal_form.getAttribute("fy_id")).getAttribute("status") == "closed") { return; }
 				journal_rows.insertAdjacentHTML("beforeend", journal_row());
 				journal_rows.children[journal_rows.children.length-1].scrollIntoView({
 					behavior: "smooth",
@@ -773,9 +865,11 @@
 			};
 			let delete_row = () => {
 				if (focused) {
-					focused.parentNode.remove();
+					if (document.getElementById(journal_form.getAttribute("fy_id")).getAttribute("status") != "closed") {
+						focused.parentNode.remove();
+						update_total();
+					}
 					focused = null;
-					update_total();
 				}
 			};
 			let show_journal = (id) => {
@@ -796,8 +890,9 @@
 					if (data.error) {
 						alert(data.error);
 					} else {
+						let status = document.getElementById(`${id}`).getAttribute("status");
 						for (row of data.rows) {
-							journal_rows.insertAdjacentHTML("beforeend", journal_row(row));
+							journal_rows.insertAdjacentHTML("beforeend", journal_row(row, status));
 						}
 						journal_total.innerHTML = `<tr>
 							<td><p></p></td>
@@ -811,7 +906,8 @@
 				.catch(error => {alert(error);});
 				fetch_ledger_menu();
 			};
-			let submit_journal = () => {
+			let submit_journal = () => { return new Promise((resolve, reject) => {
+				if (document.getElementById(journal_form.getAttribute("fy_id")).getAttribute("status") == "closed") { return resolve(false); }
 				let dates = journal_form.querySelectorAll("input[name='date']");
 				let acs_debited = journal_form.querySelectorAll("input[name='ac_debited']");
 				let acs_credited = journal_form.querySelectorAll("input[name='ac_credited']");
@@ -842,19 +938,23 @@
 							field.previousElementSibling.innerText = d.error;
 							errorVisible.push(d);
 						}
+						return resolve(false);
 					} else if (data.success) {
 						fetch_ledger_menu();
 						if (ledger_table.getAttribute('account')) {
 							fetch_ledger_account(ledger_table.getAttribute('account'));
 						}
 						alert("saved");
+						return resolve(true);
 					}
 				})
-				.catch(error => {alert(error);});
-			};
+				.catch(error => {
+					reject(error);
+				});
+			});};
 			let export_journal = async () => {
-				await submit_journal();
-				if (!journal_rows.children.length) {
+				let submission = await submit_journal();
+				if (!journal_rows.children.length || !submission) {
 					return;
 				}
 				await fetch(`/journal/${journal_form.getAttribute("fy_id")}`, {method: "GET"})
